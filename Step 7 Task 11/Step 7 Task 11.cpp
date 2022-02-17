@@ -32,7 +32,17 @@ struct Airplane {
        return numberOfRows * numberOfSeats;
     }
 
-    
+    //метод, создающий салон самолета
+    void createSaloon(int countOfRows, int countOfSeats)
+    {
+        char** rows = new char* [countOfRows];
+        for (int i = 0; i < countOfRows; i++)
+        {
+            rows[i] = new char[countOfSeats];
+        }
+
+        saloon = rows;
+    }
 };
 
 
@@ -52,20 +62,14 @@ struct Flight {
     char destination[50];
     char stopoverPoint[50];
 
-    char hourDeparture[2];
-    char minuteDeparture[2];
-
     char timeDeparture[10];
-
-    char hourArrival[2];
-    char minuteArrival[2];
 
     char timeArrival[10];
 
     int countOfLeavers;
     char leavePoint[20];
 
-    Airplane airplane;
+    char nameOfAirplane[20]; 
 
     Passenger passenger;
 };
@@ -73,9 +77,22 @@ struct Flight {
 FILE* f;
 Flight flight;
 
-int input();
+void Input();
 
-void view();
+void View();
+
+void WriteInFile(char** saloon, int numberOfRows, int numberOfSeats, FILE* f);
+
+void ReadFromFile(char** saloon, int numberOfRows, int numberOfSeats, FILE* f);
+
+//функция, реализующая выбор места в салоне
+int FillSaloon(bool& checkSeats, bool& checkInputValidation, int numberOfSeats, char alphabet[], int selectedAirplaneKey, Airplane airplaneOne, Airplane airplaneTwo, Airplane airplaneThree, Flight flight);
+
+//составляющая FillSaloon(), проверяющая корректность ввода и вакантность места
+int FillSaloonChecker(Flight flight, Airplane airplane, bool& checkSeats, bool& checkInputValidation, int i);
+
+//memset массива-салона
+void ClearSaloon(Airplane airplane);
 
 int main()
 {
@@ -95,12 +112,12 @@ int main()
         switch (key) {
         case 1:
             system("cls");
-            input();
+            Input();
             break;
 
         case 2:
             system("cls");
-            view();
+            View();
             break;
 
         }
@@ -112,42 +129,37 @@ int main()
 
 
 //Функция ввода
-int input()
+void Input()
 {
-    int count = 0, count1 = 0;
-    int a, b;
+    int countStructures = 0;
+    int selectedMenuKey, selectedAirplaneKey;
+    int numberOfSeats;
     bool checkInputValidation = true, checkStructuresInFile = false, checkSeats = false;
-    char alph[] = { 'A', 'B', 'C', 'D', 'E', 'F', 'G', 'H', 'I', 'J', 'K', 'L' }; //массив букв для места
+    char alphabet[] = { 'A', 'B', 'C', 'D', 'E', 'F', 'G', 'H', 'I', 'J', 'K', 'L' }; //массив букв для места
     char sym;
     f = NULL;
 
     Airplane airplaneOne("Boeing 737", 28, 6);
-    char airplaneOneSaloon[28][6]{ 0 };
-    for (int i = 0; i < airplaneOne.numberOfRows; i++)
-    {
-        for (int j = 0; j < airplaneOne.numberOfSeats; j++)
-        {
-            airplaneOneSaloon[i][j] = 0;
-        }
-    }
-
+    airplaneOne.createSaloon(28, 6);
+    ClearSaloon(airplaneOne);
 
     Airplane airplaneTwo("Airbus A380", 25, 6);
-    char airplaneTwoSaloon[25][6]{ 0 };
+    airplaneTwo.createSaloon(25, 6);
+    ClearSaloon(airplaneTwo);
 
     Airplane airplaneThree("Boeing 767", 45, 8);
-    char airplaneThreeSaloon[45][8]{ 0 };
+    airplaneThree.createSaloon(45, 8);
+    ClearSaloon(airplaneThree);
 
     //считаем сколько структур было записано в файл
     if (fopen_s(&f, "Airport.dat", "rb") == 0) {
         fseek(f, 678, SEEK_SET);
         while (fread(&flight, sizeof(Flight), 1, f)) {
-            count1 += 1;
+            countStructures++;
             checkStructuresInFile = true;
         }
         fclose(f);
     }
-
 
     //начало диалога с пользователем
     if (fopen_s(&f, "Airport.dat", "rb+") != 0) {
@@ -159,25 +171,26 @@ int input()
         printf("1 - создать новый файл\n");
         printf("2 - добавить данные уже в существующий\n");
         printf("3 - выйти из операции ввода\n");
-        scanf_s("%d", &a);
+        scanf_s("%d", &selectedMenuKey);
 
         //если в файле были рейсы, считываем салоны самолетов с заполненными местами
-        if (checkStructuresInFile == true && a == 2) {
+        if (checkStructuresInFile == true && selectedMenuKey == 2)
+        {
             fseek(f, 0, SEEK_SET);
-            fread(airplaneOneSaloon, 168, 1, f);
-            fread(airplaneTwoSaloon, 150, 1, f);
-            fread(airplaneThreeSaloon, 360, 1, f);
+            ReadFromFile(airplaneOne.saloon, airplaneOne.numberOfRows, airplaneOne.numberOfSeats, f);
+            ReadFromFile(airplaneTwo.saloon, airplaneTwo.numberOfRows, airplaneTwo.numberOfSeats, f);
+            ReadFromFile(airplaneThree.saloon, airplaneThree.numberOfRows, airplaneThree.numberOfSeats, f);
         }
 
         rewind(stdin);
 
         //выбор, связанный с диалогом
-        switch (a) {
+        switch (selectedMenuKey)
+        {
         case 1:
             fclose(f);
             fopen_s(&f, "Airport.dat", "wb+");
             break;
-
         case 2:
             fclose(f);
             fopen_s(&f, "Airport.dat", "rb+");
@@ -188,22 +201,26 @@ int input()
         }
     }
 
-
-    if (a != 3) {                          //заполнение нового рейса
+    //заполнение нового рейса
+    if (selectedMenuKey != 3) {                          
         do {
             printf("Введите самолет ");
             printf("\n1 - Boeing 737, 2 - Airbus A380, 3 - Boeing 767\n");
-            scanf_s("%d", &b);
+            scanf_s("%d", &selectedAirplaneKey);
 
-            switch (b) {                       //все данные созданного самолета, переходят в самолет, записанный в рейсе
+            //запись количества сидений 
+            switch (selectedAirplaneKey) {                       
             case 1:
-                flight.airplane = airplaneOne;
+                strcpy_s(flight.nameOfAirplane, airplaneOne.name);
+                numberOfSeats = airplaneOne.numberOfSeats;
                 break;
             case 2:
-                flight.airplane = airplaneTwo;
+                strcpy_s(flight.nameOfAirplane, airplaneTwo.name);
+                numberOfSeats = airplaneTwo.numberOfSeats;
                 break;
             case 3:
-                flight.airplane = airplaneThree;
+                strcpy_s(flight.nameOfAirplane, airplaneThree.name);
+                numberOfSeats = airplaneThree.numberOfSeats;
                 break;
             }
 
@@ -219,73 +236,12 @@ int input()
             printf("Введите вес багажа:\n ");
             scanf_s("%d", &(flight.passenger.baggageWeight));
 
-            printf("Введите место пассажира в формате ряд_место(напр. 5А ЛАТИНИЦЕЙ!): \n");//ввод места
-            while (checkInputValidation || checkSeats) {
-                scanf_s("%d%c", &(flight.passenger.row), &(flight.passenger.seat));
-                checkSeats = false;
-                for (int i = 0; i < flight.airplane.numberOfSeats; i++) {
-                    if (flight.passenger.seat == alph[i]) {
-                        //каждый break нужен для switch () и для корректного отображения типа ошибки 
-                        switch (b) {
-                        case 1:
-                            if (flight.passenger.row <= airplaneOne.numberOfRows)
-                            {
-                                checkSeats = true;
-                                checkInputValidation = false;
-                                if (airplaneOneSaloon[flight.passenger.row - 1][i] == NULL)
-                                {
-                                    airplaneOneSaloon[flight.passenger.row - 1][i] = flight.passenger.seat;
-                                    checkSeats = false;
-                                    break;
-                                }
-                                break;
-                            }
-                            checkInputValidation = true;
-                            break;
-                        case 2:
-                            if (flight.passenger.row <= airplaneTwo.numberOfRows)
-                            {
-                                checkSeats = true;
-                                checkInputValidation = false;
-                                if (airplaneTwoSaloon[flight.passenger.row - 1][i] == NULL)
-                                {
-                                    airplaneTwoSaloon[flight.passenger.row - 1][i] = flight.passenger.seat;
-                                    checkSeats = false;
-                                    break;
-                                }
-                                break;
-                            }
-                            checkInputValidation = true;
-                            break;
-                        case 3:
-                            if (flight.passenger.row <= airplaneThree.numberOfRows)
-                            {
-                                checkSeats = true;
-                                checkInputValidation = false;
-                                if (airplaneThreeSaloon[flight.passenger.row - 1][i] == NULL)
-                                {
-                                    airplaneThreeSaloon[flight.passenger.row - 1][i] = flight.passenger.seat;
-                                    checkSeats = false;
-                                    break;
-                                }
-                                break;
-                            }
-                            checkInputValidation = true;
-                            break;
-                        }
-
-
-                    }
-
-                    if (checkSeats)
-                    {
-                        printf("Место занято! Выберетие другое:\n");
-                        break;
-                    }
-                }
-                if (checkInputValidation) printf("Место введено неправильно! Выберите другое:\n");
+            while (checkInputValidation || checkSeats)
+            {
+                printf("Введите место пассажира в формате ряд_место(напр. 5А ЛАТИНИЦЕЙ!): \n");
+                scanf_s("%d%c", &flight.passenger.row, &flight.passenger.seat);
+                FillSaloon(checkSeats, checkInputValidation, numberOfSeats, alphabet, selectedAirplaneKey, airplaneOne, airplaneTwo, airplaneThree, flight);
             }
-
             checkInputValidation = true;
 
             printf("Введите количество детей:\n");
@@ -307,16 +263,17 @@ int input()
             printf("Введите время прибытия в формате ч : мин: \n");
             rewind(stdin);
             gets_s(flight.timeArrival);
+ 
 
             fflush(f);
             rewind(f);
-            fwrite(airplaneOneSaloon, 1, 168, f);               //запись сначала салонов, а потом рейса
-            fwrite(airplaneTwoSaloon, 1, 150, f);
-            fwrite(airplaneThreeSaloon, 1, 360, f);
-            fseek(f, 678 + sizeof(Flight) * count1, SEEK_SET);
-            fwrite(&flight, sizeof(flight), 1, f);
 
-            count++;
+            WriteInFile(airplaneOne.saloon, airplaneOne.numberOfRows, airplaneOne.numberOfSeats, f);
+            WriteInFile(airplaneTwo.saloon, airplaneTwo.numberOfRows, airplaneTwo.numberOfSeats, f);
+            WriteInFile(airplaneThree.saloon, airplaneThree.numberOfRows, airplaneThree.numberOfSeats, f);
+          
+            fseek(f, 678 + sizeof(Flight) * countStructures, SEEK_SET);
+            fwrite(&flight, sizeof(flight), 1, f);
             rewind(stdin);
 
             printf("Продолжить ввод? (д/н)\n");
@@ -328,13 +285,10 @@ int input()
     system("cls");
 
     fclose(f);
-
-    return count;
-
 }
 
 //функция вывода информации в консоль
-void view() {                                   
+void View() {                                   
 
     int count = 0, i = 0;
     fopen_s(&f, "Airport.dat", "rb");
@@ -343,11 +297,11 @@ void view() {
     }
     else {
         printf("База данных пассажиров и рейсов\n");
-        fseek(f, 678, SEEK_SET);
+        fseek(f, 678, SEEK_SET); //сделать функцию автоматизирующу рассчет 678
         while (fread(&flight, sizeof(Flight), 1, f)) {
             i += 1;
             printf("================== % d ==================\n", i);
-            printf("Самолет: %s\n", flight.airplane.name);
+            printf("Самолет: %s\n", flight.nameOfAirplane);
             printf("ФИО пассажира: %s\n", flight.passenger.name);
             printf("Вес багажа: %d\n", flight.passenger.baggageWeight);
             printf("Место пассажира: %d%c\n", flight.passenger.row, flight.passenger.seat);
@@ -366,4 +320,87 @@ void view() {
 
 }
 
+void ClearSaloon(Airplane airplane) 
+{
+    for (int i = 0; i < airplane.numberOfRows; i++)
+    {
+        memset(airplane.saloon[i], 0, sizeof(airplane.saloon[i]));
+    }
+}
 
+
+void WriteInFile(char** saloon, int numberOfRows, int numberOfSeats, FILE* f)
+{
+    
+    for (int i = 0; i < numberOfRows; i++)
+    {
+        for (int j = 0; j < numberOfSeats; j++)
+        {
+            fwrite(&(saloon[i][j]), sizeof(saloon[i][j]), 1, f);
+        }
+    }
+}
+
+void ReadFromFile(char** saloon, int numberOfRows, int numberOfSeats, FILE* f)
+{
+    for (int i = 0; i < numberOfRows; i++)
+    {
+        for (int j = 0; j < numberOfSeats; j++)
+        {
+            fread(&(saloon[i][j]), sizeof(saloon[i][j]), 1, f);
+        }
+    }
+}
+
+int FillSaloon(bool &checkSeats, bool &checkInputValidation, int numberOfSeats, char alphabet[], int selectedAirplaneKey, Airplane airplaneOne, Airplane airplaneTwo, Airplane airplaneThree, Flight flight)
+{    
+    checkSeats = false;
+    for (int i = 0; i < numberOfSeats; i++) {
+        if (flight.passenger.seat == alphabet[i]) {
+            //каждый break нужен для switch () и для корректного отображения типа ошибки 
+            switch (selectedAirplaneKey) {
+            case 1:
+                FillSaloonChecker(flight, airplaneOne, checkSeats, checkInputValidation, i);
+                break;
+            case 2:
+                FillSaloonChecker(flight, airplaneOne, checkSeats, checkInputValidation, i);
+                break;
+            case 3:
+                FillSaloonChecker(flight, airplaneOne, checkSeats, checkInputValidation, i);
+                break;
+            }
+        }
+    }
+
+    if (checkSeats)
+    {
+        printf("Место занято! Выберетие другое:\n");
+        return 0;
+    }
+        
+    if (checkInputValidation)
+    {
+        printf("Место введено неправильно! Выберите другое:\n");
+        return 0;
+    }
+    
+    return 1;
+}
+
+int FillSaloonChecker (Flight flight, Airplane airplane, bool &checkSeats, bool &checkInputValidation, int i)
+{
+    if (flight.passenger.row <= airplane.numberOfRows)
+    {
+        checkSeats = true;
+        checkInputValidation = false;
+        if (airplane.saloon[flight.passenger.row - 1][i] == NULL)
+        {
+            airplane.saloon[flight.passenger.row - 1][i] = flight.passenger.seat;
+            checkSeats = false;
+            return 1;
+        }
+        return 0;
+    }
+    checkInputValidation = true;
+    return -1;
+}
